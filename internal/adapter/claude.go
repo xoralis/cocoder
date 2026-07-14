@@ -3,10 +3,25 @@ package adapter
 import (
 	"context"
 	"fmt"
+	"os/exec"
+	"path/filepath"
+	"strings"
 
 	"github.com/xoralis/cocoder/internal/config"
 	"github.com/xoralis/cocoder/internal/execx"
 )
+
+// argvSafeCommand reports whether the command resolves to something other
+// than a .cmd/.bat shim, i.e. whether argv may safely contain cmd
+// metacharacters (quotes, braces, %).
+func argvSafeCommand(command string) bool {
+	path, err := exec.LookPath(command)
+	if err != nil {
+		return false
+	}
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext != ".cmd" && ext != ".bat"
+}
 
 // Claude drives the Claude Code CLI in headless print mode:
 //
@@ -44,6 +59,13 @@ func (a *Claude) buildArgs(in TaskInput) []string {
 	if in.ResumeSessionID != "" {
 		args = append(args, "--resume", in.ResumeSessionID)
 	}
+	if in.JSONSchema != "" && argvSafeCommand(a.spec.Command) {
+		// The schema contains quotes/braces, which os/exec rejects in the
+		// argv of .cmd/.bat shims (CVE-2024-24576); only pass it when the
+		// command resolves to a real executable. Callers fall back to
+		// fence extraction otherwise.
+		args = append(args, "--json-schema", in.JSONSchema)
+	}
 	args = append(args, claudePermissionArgs(a.spec, in.Permission)...)
 	args = append(args, a.spec.ExtraArgs...)
 	args = append(args, in.ExtraArgs...)
@@ -52,6 +74,9 @@ func (a *Claude) buildArgs(in TaskInput) []string {
 
 // claudePermissionArgs maps the coarse permission level to Claude Code
 // flags. In -p mode unapproved tools are auto-denied (no hanging prompts).
+// read-only pairs the allowlist with an explicit --disallowedTools so it
+// stays read-only even when the user's global claude config is permissive
+// (e.g. bypassPermissions as defaultMode).
 func claudePermissionArgs(spec *config.CLISpec, p config.Permission) []string {
 	if spec.PermissionArgs != nil {
 		if a, ok := spec.PermissionArgs[string(p)]; ok {
@@ -60,7 +85,14 @@ func claudePermissionArgs(spec *config.CLISpec, p config.Permission) []string {
 	}
 	switch p {
 	case config.PermReadOnly:
-		return []string{"--allowedTools", "Read,Grep,Glob,WebFetch,WebSearch,TodoWrite"}
+		// dontAsk denies anything not explicitly allowed, overriding a
+		// permissive user-global defaultMode (e.g. bypassPermissions);
+		// the disallow list is belt-and-suspenders for write tools.
+		return []string{
+			"--permission-mode", "dontAsk",
+			"--allowedTools", "Read,Grep,Glob,WebFetch,WebSearch,TodoWrite",
+			"--disallowedTools", "Bash,Edit,Write,MultiEdit,NotebookEdit",
+		}
 	case config.PermFull:
 		return []string{"--dangerously-skip-permissions"}
 	default: // PermEdits

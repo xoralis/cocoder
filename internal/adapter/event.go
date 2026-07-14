@@ -4,6 +4,7 @@
 package adapter
 
 import (
+	"encoding/json"
 	"io"
 	"time"
 
@@ -65,6 +66,9 @@ type TaskResult struct {
 	NumTurns  int        `json:"num_turns,omitempty"`
 	ExitCode  int        `json:"exit_code"`
 	ErrMsg    string     `json:"err_msg,omitempty"`
+	// StructuredOutput carries the schema-conforming JSON object when the
+	// run was started with TaskInput.JSONSchema and the CLI honored it.
+	StructuredOutput json.RawMessage `json:"structured_output,omitempty"`
 }
 
 // TaskInput is everything an adapter needs to run one task.
@@ -80,7 +84,12 @@ type TaskInput struct {
 	// ResumeSessionID, when non-empty, resumes a previous CLI session
 	// (Resume is folded into Run rather than a separate method).
 	ResumeSessionID string
-	ExtraArgs       []string
+	// JSONSchema, when non-empty, asks the CLI to constrain its final
+	// output to this JSON schema (claude --json-schema, codex
+	// --output-schema). Ignored by adapters that cannot enforce it —
+	// callers must be ready to fall back to text extraction.
+	JSONSchema string
+	ExtraArgs  []string
 	// RawLog, when non-nil, receives the raw interleaved stdout+stderr of
 	// the child process (the per-task log file).
 	RawLog io.Writer

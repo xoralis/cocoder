@@ -18,11 +18,12 @@ type claudeStreamLine struct {
 	Message   *claudeMessage `json:"message"`
 
 	// "result" event fields.
-	IsError      bool         `json:"is_error"`
-	Result       string       `json:"result"`
-	TotalCostUSD float64      `json:"total_cost_usd"`
-	NumTurns     int          `json:"num_turns"`
-	Usage        *claudeUsage `json:"usage"`
+	IsError          bool            `json:"is_error"`
+	Result           string          `json:"result"`
+	TotalCostUSD     float64         `json:"total_cost_usd"`
+	NumTurns         int             `json:"num_turns"`
+	Usage            *claudeUsage    `json:"usage"`
+	StructuredOutput json.RawMessage `json:"structured_output"`
 }
 
 type claudeMessage struct {
@@ -105,6 +106,7 @@ func handleClaudeLine(s string, emit func(Event), res *TaskResult, saw *bool, si
 		res.Summary = l.Result
 		res.CostUSD = l.TotalCostUSD
 		res.NumTurns = l.NumTurns
+		res.StructuredOutput = l.StructuredOutput
 		if l.Usage != nil {
 			res.Tokens = l.Usage.InputTokens + l.Usage.OutputTokens
 		}

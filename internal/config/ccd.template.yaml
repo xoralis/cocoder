@@ -7,13 +7,15 @@ defaults:
   retries: 1               # 任务失败重试次数(带失败上下文)
   plan_retries: 2          # 架构师 plan JSON 校验失败的重试次数
   budget_usd: 0            # 每次 run 的成本上限(美元), 0 = 不限; 仅对能回报成本的 CLI 生效
+  planner_role: architect  # ccd run 用哪个角色做需求拆解
   builder_role: backend    # planner 降级(--degrade)时使用的角色
   scope_violation: warn    # 任务改动超出 file_scope 时: warn(警告) | fail(判失败)
 
 # 角色定义: 键名即角色名, 可自由增删。
 # permission 三档:
-#   read-only  只读(适合 architect / reviewer)
-#   edits      自动批准文件编辑, 但不执行命令(安全默认)
+#   read-only  只读硬锁定(Read/Grep/Glob/WebFetch/WebSearch), 禁 Bash 和一切写工具;
+#              适合 architect。需要"跑构建来验证"的 reviewer 请用 edits/full 或 permission_args 覆盖。
+#   edits      自动批准文件编辑, 命令执行按该 CLI 自身配置审批(安全默认)
 #   full       完全自动批准, 能跑构建/测试(仅在受信任项目中使用)
 # file_scope 是该角色默认的文件归属边界提示, 按你的项目结构修改。
 roles:
@@ -37,7 +39,7 @@ roles:
     file_scope: ["docs/", "README.md"]
   reviewer:
     cli: claude
-    permission: read-only
+    permission: full        # reviewer 需要跑构建/测试来验证, 故用 full; 若只想读代码改成 read-only
 
 # CLI 定义/覆盖层: 内建 claude/codex/gemini/grok/agy 已有默认值, 此处只写差异。
 # 各 CLI 的 flag 若发生变化, 在这里覆盖即可, 不需要改代码。

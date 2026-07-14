@@ -160,9 +160,11 @@ func (s *RunStore) AppendEvent(e adapter.Event) {
 	_, _ = s.events.Write(append(b, '\n'))
 }
 
-// TaskLog creates/truncates the raw log file for one task.
+// TaskLog opens the raw log file for one task in append mode, so retry
+// attempts accumulate in the same file.
 func (s *RunStore) TaskLog(taskID string) (io.WriteCloser, error) {
-	return os.Create(filepath.Join(s.Dir, "logs", taskID+".log"))
+	return os.OpenFile(filepath.Join(s.Dir, "logs", taskID+".log"),
+		os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 }
 
 // TaskLogPath returns the raw log path for one task.

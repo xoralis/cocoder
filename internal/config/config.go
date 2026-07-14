@@ -56,6 +56,7 @@ type Defaults struct {
 	Retries        int      `yaml:"retries"`         // task failure retries
 	PlanRetries    int      `yaml:"plan_retries"`    // planner JSON validation retries
 	BudgetUSD      float64  `yaml:"budget_usd"`      // per-run cost cap, 0 = unlimited
+	PlannerRole    string   `yaml:"planner_role"`    // role that decomposes requirements ("" = architect)
 	BuilderRole    string   `yaml:"builder_role"`    // role used by --degrade single-task fallback
 	ScopeViolation string   `yaml:"scope_violation"` // warn | fail
 }
@@ -168,6 +169,11 @@ func (c *Config) validate() error {
 	if br := c.Defaults.BuilderRole; br != "" {
 		if _, ok := c.Roles[br]; !ok {
 			errs = append(errs, fmt.Errorf("defaults.builder_role %q is not a defined role", br))
+		}
+	}
+	if pr := c.Defaults.PlannerRole; pr != "" {
+		if _, ok := c.Roles[pr]; !ok {
+			errs = append(errs, fmt.Errorf("defaults.planner_role %q is not a defined role", pr))
 		}
 	}
 	switch c.Defaults.ScopeViolation {

@@ -93,3 +93,46 @@ func statusPaths(dir string) (map[string]bool, error) {
 	}
 	return m, nil
 }
+
+// DiffStat renders `git diff --stat [since]` (empty since = vs HEAD),
+// trimmed and capped to maxLines.
+func DiffStat(dir, since string, maxLines int) string {
+	args := []string{"diff", "--stat"}
+	if since != "" {
+		args = append(args, since)
+	}
+	out, err := git(dir, args...)
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if maxLines > 0 && len(lines) > maxLines {
+		lines = append(lines[:maxLines], fmt.Sprintf("... (%d more lines)", len(lines)-maxLines))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// Untracked lists untracked files (porcelain "??" entries).
+func Untracked(dir string) []string {
+	out, err := git(dir, "status", "--porcelain=v1", "-z", "-uall")
+	if err != nil {
+		return nil
+	}
+	var files []string
+	entries := strings.Split(out, "\x00")
+	for i := 0; i < len(entries); i++ {
+		e := entries[i]
+		if len(e) < 4 {
+			continue
+		}
+		status, path := e[:2], e[3:]
+		if status == "??" {
+			files = append(files, path)
+		}
+		if status[0] == 'R' || status[0] == 'C' {
+			i++
+		}
+	}
+	sort.Strings(files)
+	return files
+}

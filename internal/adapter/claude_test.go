@@ -114,6 +114,21 @@ func TestClaudeRunPermissionAndResumeArgs(t *testing.T) {
 	}
 }
 
+func TestClaudeReadOnlyIsHardLocked(t *testing.T) {
+	fr := &execx.FakeRunner{Outcomes: []execx.FakeOutcome{{Exit: 0}}}
+	a := NewClaude(claudeSpec(), fr)
+	ch, _ := a.Run(context.Background(), TaskInput{TaskID: "t", Role: "r", Prompt: "p", Permission: config.PermReadOnly})
+	drain(ch)
+	args := fr.Calls[0].Args
+	// dontAsk must be explicit so a permissive user-global defaultMode
+	// (bypassPermissions) cannot leak write access into read-only roles.
+	for _, want := range []string{"--permission-mode", "dontAsk", "--allowedTools", "--disallowedTools"} {
+		if !slices.Contains(args, want) {
+			t.Errorf("read-only args missing %q: %v", want, args)
+		}
+	}
+}
+
 func TestClaudeRunPermissionOverrideFromConfig(t *testing.T) {
 	spec := claudeSpec()
 	spec.PermissionArgs = map[string][]string{"edits": {"--custom-flag"}}
