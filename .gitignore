@@ -1,0 +1,7 @@
+# build artifacts
+/ccd
+/ccd.exe
+*.test
+
+# ccd runtime state (also appended by `ccd init` in target projects)
+.ccd/

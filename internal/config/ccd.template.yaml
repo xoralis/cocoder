@@ -1,0 +1,57 @@
+# cocoder (ccd) 项目配置
+# 角色(roles)决定"谁干什么活",CLI 定义(clis)决定"每个工具怎么被驱动"。
+version: 1
+
+defaults:
+  task_timeout: 30m        # 单任务超时
+  retries: 1               # 任务失败重试次数(带失败上下文)
+  plan_retries: 2          # 架构师 plan JSON 校验失败的重试次数
+  budget_usd: 0            # 每次 run 的成本上限(美元), 0 = 不限; 仅对能回报成本的 CLI 生效
+  builder_role: backend    # planner 降级(--degrade)时使用的角色
+  scope_violation: warn    # 任务改动超出 file_scope 时: warn(警告) | fail(判失败)
+
+# 角色定义: 键名即角色名, 可自由增删。
+# permission 三档:
+#   read-only  只读(适合 architect / reviewer)
+#   edits      自动批准文件编辑, 但不执行命令(安全默认)
+#   full       完全自动批准, 能跑构建/测试(仅在受信任项目中使用)
+# file_scope 是该角色默认的文件归属边界提示, 按你的项目结构修改。
+roles:
+  architect:
+    cli: claude
+    # model: opus
+    permission: read-only
+    system_prompt: |
+      You are a pragmatic software architect. Decide interfaces and contracts first.
+  backend:
+    cli: claude            # M3 后可换 codex
+    permission: edits      # 需要 agent 跑构建/测试时改为 full
+    file_scope: ["server/", "internal/"]
+  frontend:
+    cli: claude            # M3 后可换 gemini
+    permission: edits
+    file_scope: ["web/"]
+  docs:
+    cli: claude            # M3 后可换 grok / gemini
+    permission: edits
+    file_scope: ["docs/", "README.md"]
+  reviewer:
+    cli: claude
+    permission: read-only
+
+# CLI 定义/覆盖层: 内建 claude/codex/gemini/grok/agy 已有默认值, 此处只写差异。
+# 各 CLI 的 flag 若发生变化, 在这里覆盖即可, 不需要改代码。
+clis:
+  claude:
+    command: claude
+    # bare: true                             # 跳过 hooks/skills/CLAUDE.md 加载(需 ANTHROPIC_API_KEY 认证)
+    # extra_args: ["--fallback-model", "sonnet"]
+    # permission_args:                       # 覆盖内建 permission→flag 映射
+    #   edits: ["--permission-mode", "acceptEdits"]
+  # 未知/新 CLI 用 generic 适配器声明(M3 提供):
+  # mycli:
+  #   adapter: generic
+  #   command: mycli
+  #   run_args: ["-p", "{prompt}"]           # 占位符: {prompt} {model} {workdir} {session}
+  #   prompt_via: arg                        # arg | stdin(支持 stdin 的强烈建议 stdin)
+  #   output: text                           # text | jsonl
