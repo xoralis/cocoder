@@ -26,15 +26,15 @@ roles:
     system_prompt: |
       You are a pragmatic software architect. Decide interfaces and contracts first.
   backend:
-    cli: claude            # M3 后可换 codex
+    cli: claude            # 可换 codex / grok
     permission: edits      # 需要 agent 跑构建/测试时改为 full
     file_scope: ["server/", "internal/"]
   frontend:
-    cli: claude            # M3 后可换 gemini
+    cli: claude            # 可换 gemini / codex / grok
     permission: edits
     file_scope: ["web/"]
   docs:
-    cli: claude            # M3 后可换 grok / gemini
+    cli: claude            # 可换 grok / gemini
     permission: edits
     file_scope: ["docs/", "README.md"]
   reviewer:
@@ -50,10 +50,15 @@ clis:
     # extra_args: ["--fallback-model", "sonnet"]
     # permission_args:                       # 覆盖内建 permission→flag 映射
     #   edits: ["--permission-mode", "acceptEdits"]
-  # 未知/新 CLI 用 generic 适配器声明(M3 提供):
+  # codex:
+  #   extra_args: ["--enable", "some_feature"]
+  # grok:
+  #   extra_args: ["--max-turns", "40"]
+  # 未知/新 CLI 用 generic 适配器声明(纯文本输出, 退出码判成败):
   # mycli:
   #   adapter: generic
   #   command: mycli
   #   run_args: ["-p", "{prompt}"]           # 占位符: {prompt} {model} {workdir} {session}
+  #   resume_args: ["-r", "{session}", "-p", "{prompt}"]   # 可选; 提供后支持续会话
   #   prompt_via: arg                        # arg | stdin(支持 stdin 的强烈建议 stdin)
   #   output: text                           # text | jsonl

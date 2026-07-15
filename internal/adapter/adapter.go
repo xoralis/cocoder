@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/xoralis/cocoder/internal/config"
 	"github.com/xoralis/cocoder/internal/execx"
@@ -31,8 +32,6 @@ type Adapter interface {
 }
 
 // BuildRegistry constructs adapters for every CLI referenced by the config.
-// CLIs whose adapter kind is not implemented yet are silently absent from
-// the registry; callers report a clear error at use time.
 func BuildRegistry(cfg *config.Config, r execx.Runner) (map[string]Adapter, error) {
 	reg := map[string]Adapter{}
 	for _, name := range cfg.CLINames() {
@@ -43,8 +42,16 @@ func BuildRegistry(cfg *config.Config, r execx.Runner) (map[string]Adapter, erro
 		switch spec.Adapter {
 		case "claude":
 			reg[name] = NewClaude(spec, r)
+		case "codex":
+			reg[name] = NewCodex(spec, r)
+		case "gemini":
+			reg[name] = NewGemini(spec, r)
+		case "grok":
+			reg[name] = NewGrok(spec, r)
+		case "generic":
+			reg[name] = NewGeneric(spec, r)
 		default:
-			// codex / gemini / generic adapters land in M3.
+			return nil, fmt.Errorf("cli %q: unknown adapter kind %q (valid: claude, codex, gemini, grok, generic)", name, spec.Adapter)
 		}
 	}
 	return reg, nil

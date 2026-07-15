@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -81,9 +82,10 @@ type CLISpec struct {
 	Command string `yaml:"command"` // binary name, resolved via PATH (finds .cmd shims on Windows)
 
 	// Generic-adapter fields.
-	RunArgs   []string `yaml:"run_args"`   // arg template; {prompt} {model} {workdir} {session} placeholders
-	PromptVia string   `yaml:"prompt_via"` // stdin | arg
-	Output    string   `yaml:"output"`     // jsonl | text
+	RunArgs    []string `yaml:"run_args"`    // arg template; {prompt} {model} {workdir} {session} placeholders
+	ResumeArgs []string `yaml:"resume_args"` // used instead of run_args when resuming; presence enables resume
+	PromptVia  string   `yaml:"prompt_via"`  // stdin | arg
+	Output     string   `yaml:"output"`      // jsonl | text
 
 	VersionArgs []string `yaml:"version_args"`
 	ExtraArgs   []string `yaml:"extra_args"`
@@ -181,6 +183,25 @@ func (c *Config) validate() error {
 	default:
 		errs = append(errs, fmt.Errorf("defaults.scope_violation must be warn or fail, got %q", c.Defaults.ScopeViolation))
 	}
+	// Validate every referenced/defined CLI's adapter wiring.
+	for _, name := range c.CLINames() {
+		spec, err := c.ResolveCLI(name)
+		if err != nil {
+			continue // already reported via the role loop above
+		}
+		switch spec.Adapter {
+		case "claude", "codex", "gemini", "grok":
+		case "generic":
+			if spec.Output != "" && spec.Output != "text" {
+				errs = append(errs, fmt.Errorf("clis.%s: the generic adapter only supports output: text (got %q)", name, spec.Output))
+			}
+			if spec.PromptVia == "arg" && !argsContainPrompt(spec.RunArgs) {
+				errs = append(errs, fmt.Errorf("clis.%s: prompt_via is \"arg\" but run_args has no \"{prompt}\" placeholder", name))
+			}
+		default:
+			errs = append(errs, fmt.Errorf("clis.%s: unknown adapter %q (valid: claude, codex, gemini, grok, generic)", name, spec.Adapter))
+		}
+	}
 	return errors.Join(errs...)
 }
 
@@ -247,6 +268,16 @@ func (c *Config) ResolveCLI(name string) (*CLISpec, error) {
 	return &spec, nil
 }
 
+// argsContainPrompt reports whether the arg template references {prompt}.
+func argsContainPrompt(args []string) bool {
+	for _, a := range args {
+		if strings.Contains(a, "{prompt}") {
+			return true
+		}
+	}
+	return false
+}
+
 func overlaySpec(dst, src *CLISpec) {
 	if src.Adapter != "" {
 		dst.Adapter = src.Adapter
@@ -256,6 +287,9 @@ func overlaySpec(dst, src *CLISpec) {
 	}
 	if len(src.RunArgs) > 0 {
 		dst.RunArgs = src.RunArgs
+	}
+	if len(src.ResumeArgs) > 0 {
+		dst.ResumeArgs = src.ResumeArgs
 	}
 	if src.PromptVia != "" {
 		dst.PromptVia = src.PromptVia

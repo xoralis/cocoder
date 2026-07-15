@@ -88,10 +88,12 @@ func claudePermissionArgs(spec *config.CLISpec, p config.Permission) []string {
 		// dontAsk denies anything not explicitly allowed, overriding a
 		// permissive user-global defaultMode (e.g. bypassPermissions);
 		// the disallow list is belt-and-suspenders for write tools.
+		// Task is denied too: subagents can't do more than their parent,
+		// so letting a read-only role spawn them just burns turns.
 		return []string{
 			"--permission-mode", "dontAsk",
 			"--allowedTools", "Read,Grep,Glob,WebFetch,WebSearch,TodoWrite",
-			"--disallowedTools", "Bash,Edit,Write,MultiEdit,NotebookEdit",
+			"--disallowedTools", "Bash,Edit,Write,MultiEdit,NotebookEdit,Task",
 		}
 	case config.PermFull:
 		return []string{"--dangerously-skip-permissions"}
