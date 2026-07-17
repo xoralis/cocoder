@@ -55,7 +55,7 @@ func init() {
 	pf.BoolVar(&flagVerbose, "verbose", false, "show agent stderr and extra detail")
 	pf.BoolVar(&flagNoColor, "no-color", false, "disable colored output")
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
-	rootCmd.AddCommand(initCmd, doctorCmd, assignCmd, runCmd, statusCmd, logsCmd)
+	rootCmd.AddCommand(initCmd, doctorCmd, assignCmd, runCmd, statusCmd, logsCmd, resumeCmd, followupCmd, rolesCmd)
 }
 
 // Execute runs the root command; errors exit with code 1.

@@ -2,7 +2,9 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -72,14 +74,25 @@ var statusCmd = &cobra.Command{
 		}
 		tw.Flush()
 		fmt.Print(buf.String())
-		if total > 0 {
-			fmt.Printf("\ntotal cost: $%.4f\n", total)
+		if meta.PlannerCostUSD > 0 {
+			fmt.Printf("\nplanner: $%.4f (%d attempt(s))", meta.PlannerCostUSD, meta.PlannerAttempts)
+			total += meta.PlannerCostUSD
 		}
+		if meta.Resumes > 0 {
+			fmt.Printf("\nresumed %d time(s)", meta.Resumes)
+		}
+		if total > 0 {
+			fmt.Printf("\ntotal cost: $%.4f (only CLIs that report cost are counted)", total)
+		}
+		fmt.Println()
 		return nil
 	},
 }
 
-var logsRunID string
+var (
+	logsRunID  string
+	logsFollow bool
+)
 
 var logsCmd = &cobra.Command{
 	Use:   "logs <task-id>",
@@ -91,19 +104,55 @@ var logsCmd = &cobra.Command{
 			return err
 		}
 		path := store.TaskLogPath(args[0])
-		b, err := os.ReadFile(path)
-		if err != nil {
+		if _, err := os.Stat(path); err != nil {
 			avail := availableLogs(store)
 			return fmt.Errorf("no log for task %q in run %s (available: %s)",
 				args[0], store.RunID(), strings.Join(avail, ", "))
+		}
+		if logsFollow {
+			return followFile(path)
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
 		}
 		_, _ = os.Stdout.Write(b)
 		return nil
 	},
 }
 
+// followFile tails a log file (print existing content, then poll for
+// growth) until Ctrl-C.
+func followFile(path string) error {
+	ctx, cancel := withInterrupt(context.Background())
+	defer cancel()
+	var offset int64
+	for {
+		f, err := os.Open(path)
+		if err == nil {
+			if fi, serr := f.Stat(); serr == nil {
+				if fi.Size() < offset {
+					offset = 0 // truncated: start over
+				}
+				if fi.Size() > offset {
+					_, _ = f.Seek(offset, io.SeekStart)
+					n, _ := io.Copy(os.Stdout, f)
+					offset += n
+				}
+			}
+			f.Close()
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+}
+
 func init() {
 	logsCmd.Flags().StringVar(&logsRunID, "run", "", "run id (default: the latest run)")
+	logsCmd.Flags().BoolVarP(&logsFollow, "follow", "f", false, "keep printing as the log grows (Ctrl-C to stop)")
 }
 
 // openRunArg opens the run named by args[0], or the latest.

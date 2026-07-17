@@ -28,6 +28,12 @@ type Meta struct {
 	CcdVersion string     `json:"ccd_version,omitempty"`
 	CreatedAt  time.Time  `json:"created_at"`
 	EndedAt    *time.Time `json:"ended_at,omitempty"`
+
+	// Planner accounting (persisted so `ccd status` and resumed runs can
+	// report lifetime spend).
+	PlannerCostUSD  float64 `json:"planner_cost_usd,omitempty"`
+	PlannerAttempts int     `json:"planner_attempts,omitempty"`
+	Resumes         int     `json:"resumes,omitempty"`
 }
 
 // TaskState is the persisted per-task state (task-<id>.state.json).
@@ -85,9 +91,43 @@ func OpenRun(projectDir, runID string) (*RunStore, error) {
 
 // LatestRunID returns the newest run id (ids sort chronologically).
 func LatestRunID(projectDir string) (string, error) {
+	ids, err := runIDsDesc(projectDir)
+	if err != nil {
+		return "", err
+	}
+	return ids[0], nil
+}
+
+// LatestUnfinishedRunID returns the newest run whose recorded status is not
+// "completed" — the default target of `ccd resume`. A "running" status with
+// no live process is a crash leftover and counts as unfinished.
+func LatestUnfinishedRunID(projectDir string) (string, error) {
+	ids, err := runIDsDesc(projectDir)
+	if err != nil {
+		return "", err
+	}
+	for _, id := range ids {
+		s, err := OpenRun(projectDir, id)
+		if err != nil {
+			continue
+		}
+		meta, err := s.LoadMeta()
+		if err != nil {
+			continue
+		}
+		switch meta.Status {
+		case "running", "interrupted", "failed":
+			return id, nil
+		}
+	}
+	return "", fmt.Errorf("no unfinished runs under %s", runsRoot(projectDir))
+}
+
+// runIDsDesc lists run ids newest-first.
+func runIDsDesc(projectDir string) ([]string, error) {
 	entries, err := os.ReadDir(runsRoot(projectDir))
 	if err != nil {
-		return "", fmt.Errorf("no runs found: %w", err)
+		return nil, fmt.Errorf("no runs found: %w", err)
 	}
 	var ids []string
 	for _, e := range entries {
@@ -96,10 +136,10 @@ func LatestRunID(projectDir string) (string, error) {
 		}
 	}
 	if len(ids) == 0 {
-		return "", fmt.Errorf("no runs found under %s", runsRoot(projectDir))
+		return nil, fmt.Errorf("no runs found under %s", runsRoot(projectDir))
 	}
-	sort.Strings(ids)
-	return ids[len(ids)-1], nil
+	sort.Sort(sort.Reverse(sort.StringSlice(ids)))
+	return ids, nil
 }
 
 // RunID is the directory name.

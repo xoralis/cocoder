@@ -7,14 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
-	"github.com/xoralis/cocoder/internal/adapter"
-	"github.com/xoralis/cocoder/internal/execx"
 	"github.com/xoralis/cocoder/internal/orchestrator"
 	"github.com/xoralis/cocoder/internal/state"
-	"github.com/xoralis/cocoder/internal/ui"
 )
 
 var (
@@ -34,14 +30,6 @@ var runCmd = &cobra.Command{
 		if goal == "" && runPlan == "" {
 			return fmt.Errorf("provide a requirement (or --plan <file>)")
 		}
-		cfg, err := loadConfig()
-		if err != nil {
-			return err
-		}
-		registry, err := adapter.BuildRegistry(cfg, execx.NewOSRunner())
-		if err != nil {
-			return err
-		}
 		wd, err := os.Getwd()
 		if err != nil {
 			return err
@@ -52,22 +40,16 @@ var runCmd = &cobra.Command{
 		}
 		defer store.Close()
 
-		console := ui.NewConsole(color.Output, flagVerbose)
-		console.Printf("run %s | goal: %s", store.RunID(), truncateRunes(goal, 100))
-
-		orch := &orchestrator.Orchestrator{
-			Cfg:      cfg,
-			Registry: registry,
-			Store:    store,
-			Console:  console,
-			WorkDir:  wd,
-			Version:  Version,
+		orch, err := newOrchestrator(store)
+		if err != nil {
+			return err
 		}
+		orch.Console.Printf("run %s | goal: %s", store.RunID(), truncateRunes(goal, 100))
 
 		ctx, cancel := withInterrupt(context.Background())
 		defer cancel()
 
-		err = orch.Run(ctx, orchestrator.RunOptions{
+		return orch.Run(ctx, orchestrator.RunOptions{
 			Goal:      goal,
 			Confirm:   runConfirm,
 			PlanFile:  runPlan,
@@ -76,10 +58,6 @@ var runCmd = &cobra.Command{
 			Degrade:   runDegrade,
 			Stdin:     os.Stdin,
 		})
-		if err != nil {
-			return fmt.Errorf("%w", err)
-		}
-		return nil
 	},
 }
 

@@ -94,3 +94,40 @@ func TestTaskLog(t *testing.T) {
 		t.Errorf("log roundtrip: %q err=%v", b, err)
 	}
 }
+
+func TestLatestUnfinishedRunID(t *testing.T) {
+	dir := t.TempDir()
+	mk := func(status string) *RunStore {
+		s, err := CreateRun(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(s.Close)
+		if err := s.SaveMeta(&Meta{RunID: s.RunID(), Mode: "run", Status: status, CreatedAt: time.Now()}); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(1100 * time.Millisecond) // run ids have second granularity
+		return s
+	}
+	mk("completed")
+	unfinished := mk("interrupted")
+	mk("completed")
+
+	got, err := LatestUnfinishedRunID(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != unfinished.RunID() {
+		t.Errorf("latest unfinished = %q, want %q", got, unfinished.RunID())
+	}
+}
+
+func TestLatestUnfinishedNoneFound(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := CreateRun(dir)
+	defer s.Close()
+	_ = s.SaveMeta(&Meta{RunID: s.RunID(), Mode: "run", Status: "completed", CreatedAt: time.Now()})
+	if _, err := LatestUnfinishedRunID(dir); err == nil {
+		t.Fatal("expected error when every run is completed")
+	}
+}

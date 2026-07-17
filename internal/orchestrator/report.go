@@ -31,14 +31,17 @@ func (o *Orchestrator) printPlanTable(pl *plan.Plan, order []string) {
 }
 
 // report prints the end-of-run summary: task table, git evidence, costs.
-// This is the human review gate - ccd never commits.
+// This is the human review gate - ccd never commits. Costs and the git
+// diff cover the run's whole lifetime (across resumes).
 func (o *Orchestrator) report(meta *state.Meta, pl *plan.Plan, order []string,
-	states map[string]*state.TaskState, snapStart *gitx.Snapshot,
-	totalCost, budget float64, stopReason string) {
+	states map[string]*state.TaskState, totalCost, budget float64, stopReason string) {
 
 	c := o.Console
 	c.Printf("")
 	c.Printf("=== run %s: %s ===", meta.RunID, meta.Status)
+	if meta.Resumes > 0 {
+		c.Printf("resumed %d time(s); durations and costs are lifetime totals", meta.Resumes)
+	}
 	if stopReason != "" {
 		c.Warnf("%s", stopReason)
 	}
@@ -74,8 +77,8 @@ func (o *Orchestrator) report(meta *state.Meta, pl *plan.Plan, order []string,
 	}
 
 	// Git evidence for the human review gate.
-	if snapStart != nil {
-		if diff := gitx.DiffStat(o.WorkDir, snapStart.Head, 30); diff != "" {
+	if gitx.IsRepo(o.WorkDir) {
+		if diff := gitx.DiffStat(o.WorkDir, meta.StartHead, 30); diff != "" {
 			c.Printf("")
 			c.Printf("git diff --stat (since run start):")
 			c.Printf("%s", diff)
@@ -95,6 +98,9 @@ func (o *Orchestrator) report(meta *state.Meta, pl *plan.Plan, order []string,
 
 	c.Printf("")
 	costLine := fmt.Sprintf("total cost: $%.4f (only CLIs that report cost are counted)", totalCost)
+	if meta.PlannerCostUSD > 0 {
+		costLine += fmt.Sprintf(", planner $%.4f", meta.PlannerCostUSD)
+	}
 	if budget > 0 {
 		costLine += fmt.Sprintf(", budget $%.2f", budget)
 	}
